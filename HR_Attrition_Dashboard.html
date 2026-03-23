@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR Attrition Analysis Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  /* ── CSS VARIABLES (all colours in one place) ── */
+  :root {
+    --bg:        #0d1b3e;
+    --sidebar:   #071028;
+    --accent:    #f2c811;
+    --blue:      #4da3ff;
+    --green:     #12b86a;
+    --red:       #e83d3d;
+    --orange:    #f28b00;
+    --purple:    #7b68ee;
+    --card:      #112051;
+    --text:      #e8f0ff;
+    --mid:       #93b4e8;
+    --light:     #5a7db5;
+    --border:    #1e3a6e;
+    --shadow:    0 4px 16px rgba(0,0,50,0.4);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; }
+  /* SIDEBAR */
+  .sidebar { width:56px; background:var(--sidebar); display:flex; flex-direction:column; align-items:center; padding:12px 0; gap:4px; flex-shrink:0; z-index:100; }
+  .sidebar-logo { width:36px; height:36px; background:var(--accent); border-radius:6px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:13px; color:#000; margin-bottom:16px; }
+  .sidebar-icon { width:40px; height:40px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .2s; font-size:18px; }
+  .sidebar-icon:hover { background:rgba(255,255,255,.1); }
+  .sidebar-icon.active { background:rgba(242,200,17,.2); }
+  /* MAIN */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  /* TOPBAR */
+  .topbar { background:#0a1632; border-bottom:1px solid var(--border); padding:0 20px; height:44px; display:flex; align-items:center; flex-shrink:0; }
+  .topbar-tabs { display:flex; height:100%; }
+  .topbar-tab { padding:0 18px; height:100%; display:flex; align-items:center; font-size:13px; color:var(--mid); border-bottom:2px solid transparent; cursor:pointer; transition:all .2s; white-space:nowrap; }
+  .topbar-tab.active { color:var(--blue); border-bottom-color:var(--blue); font-weight:600; }
+  .topbar-tab:hover { color:var(--text); background:#091428; }
+  .topbar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .topbar-btn { padding:5px 12px; background:var(--blue); color:#fff; border:none; border-radius:3px; font-size:12px; cursor:pointer; font-weight:500; }
+  .filter-pill { background:var(--bg); border:1px solid var(--border); border-radius:3px; padding:4px 10px; font-size:11px; color:var(--mid); display:flex; align-items:center; gap:5px; cursor:pointer; }
+  /* PAGES */
+  .page { display:none; flex:1; overflow-y:auto; padding:16px; gap:12px; flex-direction:column; }
+  .page.active { display:flex; }
+  /* REPORT HEADER */
+  .rh { display:flex; align-items:center; justify-content:space-between; padding:0 4px 4px; }
+  .rh-title { font-size:18px; font-weight:700; }
+  .rh-sub { font-size:12px; color:var(--light); margin-top:2px; }
+  .rh-refresh { font-size:11px; color:var(--light); }
+  /* KPI ROW */
+  .kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .kpi { background:var(--card); border-radius:4px; padding:14px 16px; box-shadow:var(--shadow); border-left:4px solid transparent; }
+  .kpi.blue  { border-left-color:var(--blue); }
+  .kpi.red   { border-left-color:var(--red); }
+  .kpi.green { border-left-color:var(--green); }
+  .kpi.orange{ border-left-color:var(--orange); }
+  .kpi.purple{ border-left-color:var(--purple); }
+  .kpi-lbl { font-size:10.5px; color:var(--light); text-transform:uppercase; letter-spacing:.5px; font-weight:600; margin-bottom:6px; }
+  .kpi-val { font-size:26px; font-weight:700; line-height:1; margin-bottom:4px; }
+  .kpi.blue   .kpi-val { color:var(--blue); }
+  .kpi.red    .kpi-val { color:var(--red); }
+  .kpi.green  .kpi-val { color:var(--green); }
+  .kpi.orange .kpi-val { color:var(--orange); }
+  .kpi.purple .kpi-val { color:var(--purple); }
+  .kpi-chg { font-size:11px; color:var(--light); }
+  .kpi-chg.up { color:var(--red); }
+  .kpi-chg.dn { color:var(--green); }
+  /* CHART GRID */
+  .crow { display:grid; gap:10px; }
+  .crow-2 { grid-template-columns:1fr 1fr; }
+  .crow-3 { grid-template-columns:1fr 1fr 1fr; }
+  /* CHART CARD */
+  .cc { background:var(--card); border-radius:4px; box-shadow:var(--shadow); padding:14px 16px; display:flex; flex-direction:column; }
+  .cc-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cc-title { font-size:12.5px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:6px; }
+  .dot { width:8px; height:8px; border-radius:50%; }
+  .cc-sub { font-size:10.5px; color:var(--light); margin-top:1px; }
+  .cc-menu { font-size:16px; color:var(--light); cursor:pointer; padding:2px 6px; border-radius:3px; }
+  .cc-menu:hover { background:#091428; }
+  /* DONUT LAYOUT */
+  .donut-wrap { position:relative; width:120px; height:120px; flex-shrink:0; }
+  .donut-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none; }
+  .donut-val { font-size:22px; font-weight:700; line-height:1; color:var(--red); }
+  .donut-lbl { font-size:9px; color:var(--light); margin-top:2px; }
+  .donut-row { display:flex; align-items:center; gap:16px; }
+  .d-legend { display:flex; flex-direction:column; gap:8px; flex:1; }
+  .li { display:flex; align-items:center; gap:8px; }
+  .ldot { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+  .ltxt { font-size:11px; color:var(--mid); }
+  .lval { margin-left:auto; font-size:11px; font-weight:600; color:var(--text); }
+  .divider { height:1px; background:var(--border); margin:4px 0; }
+  /* HORIZONTAL BAR */
+  .hbar-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .hbar-lbl { font-size:11px; color:var(--mid); width:130px; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hbar-track { flex:1; height:18px; background:var(--bg); border-radius:3px; overflow:hidden; }
+  .hbar-fill { height:100%; border-radius:3px; display:flex; align-items:center; padding-left:6px; }
+  .hbar-fill span { font-size:10px; font-weight:600; color:#fff; }
+  .hbar-pct { font-size:10px; color:var(--light); width:38px; text-align:right; flex-shrink:0; }
+  /* PROGRESS BAR (inline) */
+  .pb-wrap { display:flex; align-items:center; gap:8px; }
+  .pb-track { flex:1; height:6px; background:var(--bg); border-radius:3px; overflow:hidden; }
+  .pb-fill { height:100%; border-radius:3px; background:var(--red); }
+  /* TABLE */
+  .dt { width:100%; border-collapse:collapse; font-size:11.5px; }
+  .dt th { background:var(--bg); color:var(--mid); font-weight:600; padding:7px 10px; text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; border-bottom:1px solid var(--border); }
+  .dt td { padding:7px 10px; border-bottom:1px solid var(--border); color:var(--text); }
+  .dt tr:hover td { background:rgba(77,163,255,.06); }
+  .dt tr.total-row { font-weight:600; }
+  /* BADGE */
+  .badge { display:inline-block; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:600; }
+  .badge-red    { background:rgba(232,61,61,.2);    color:var(--red); }
+  .badge-yellow { background:rgba(242,200,17,.2);   color:#c4960d; }
+  .badge-green  { background:rgba(18,184,106,.2);   color:var(--green); }
+  /* INSIGHT CARDS */
+  .insight { border-left:3px solid; padding:8px 10px; border-radius:0 4px 4px 0; margin-bottom:8px; }
+  .insight.red    { background:rgba(232,61,61,.1);   border-color:var(--red); }
+  .insight.orange { background:rgba(242,139,0,.1);   border-color:var(--orange); }
+  .insight.green  { background:rgba(18,184,106,.1);  border-color:var(--green); }
+  .insight.purple { background:rgba(123,104,238,.1); border-color:var(--purple); }
+  .insight-title { font-size:11px; font-weight:600; margin-bottom:2px; }
+  .insight-body  { font-size:10.5px; color:var(--mid); }
+  /* BOTTOM BAR */
+  .bbar { background:var(--sidebar); border-top:1px solid var(--border); height:28px; display:flex; align-items:center; padding:0 16px; gap:16px; flex-shrink:0; }
+  .pg-ind { font-size:10.5px; color:var(--light); display:flex; align-items:center; gap:6px; }
+  .pg-dot { width:18px; height:18px; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:10px; cursor:pointer; background:var(--bg); color:var(--mid); }
+  .pg-dot.active { background:var(--blue); color:#fff; }
+  .zoom { margin-left:auto; font-size:11px; color:var(--light); display:flex; align-items:center; gap:8px; }
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════ -->
+<div class="sidebar">
+  <div class="sidebar-logo">HR</div>
+  <div class="sidebar-icon active" onclick="switchPage('overview')">📊</div>
+  <div class="sidebar-icon" onclick="switchPage('demographics')">👥</div>
+  <div class="sidebar-icon" onclick="switchPage('churn')">🔍</div>
+  <div class="sidebar-icon" onclick="switchPage('data')">📋</div>
+  <div style="margin-top:auto"><div class="sidebar-icon">⚙️</div></div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     MAIN AREA
+════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- TOP NAV -->
+  <div class="topbar">
+    <div class="topbar-tabs">
+      <div class="topbar-tab active" id="tab-overview"      onclick="switchPage('overview')">Overview</div>
+      <div class="topbar-tab"        id="tab-demographics"  onclick="switchPage('demographics')">Demographics</div>
+      <div class="topbar-tab"        id="tab-churn"         onclick="switchPage('churn')">Attrition Analysis</div>
+      <div class="topbar-tab"        id="tab-data"          onclick="switchPage('data')">Data Table</div>
+    </div>
+    <div class="topbar-right">
+      <div class="filter-pill">🗓 FY 2024 ▾</div>
+      <div class="filter-pill">All Departments ▾</div>
+      <button class="topbar-btn">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- ── PAGE 1: OVERVIEW ── -->
+  <div class="page active" id="page-overview">
+    <div class="rh">
+      <div>
+        <div class="rh-title">HR Attrition Analysis Dashboard</div>
+        <div class="rh-sub">Employee attrition insights &amp; workforce analytics · 200 employees · 6 departments</div>
+      </div>
+      <div class="rh-refresh">🕐 Last refreshed: Today, 10:30 AM</div>
+    </div>
+
+    <!-- KPI CARDS — rendered by JS from DATA -->
+    <div class="kpi-row" id="kpi-row"></div>
+
+    <div class="crow crow-3">
+      <!-- Donut -->
+      <div class="cc">
+        <div class="cc-hd">
+          <div><div class="cc-title"><span class="dot" style="background:var(--red)"></span>Attrition Overview</div><div class="cc-sub">% employees who left</div></div>
+          <div class="cc-menu">⋯</div>
+        </div>
+        <div style="height:180px">
+          <div class="donut-row" style="height:100%;align-items:center">
+            <div class="donut-wrap">
+              <canvas id="attritionDonut"></canvas>
+              <div class="donut-center"><div class="donut-val" id="donut-pct"></div><div class="donut-lbl">Attrited</div></div>
+            </div>
+            <div class="d-legend" id="donut-legend"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Dept bar -->
+      <div class="cc">
+        <div class="cc-hd">
+          <div><div class="cc-title"><span class="dot" style="background:var(--orange)"></span>Attrition by Department</div><div class="cc-sub">Attrition rate %</div></div>
+          <div class="cc-menu">⋯</div>
+        </div>
+        <div style="height:180px"><canvas id="deptBar"></canvas></div>
+      </div>
+      <!-- Overtime bar -->
+      <div class="cc">
+        <div class="cc-hd">
+          <div><div class="cc-title"><span class="dot" style="background:var(--purple)"></span>Overtime vs Attrition</div><div class="cc-sub">Impact of overtime</div></div>
+          <div class="cc-menu">⋯</div>
+        </div>
+        <div style="height:180px"><canvas id="overtimeBar"></canvas></div>
+      </div>
+    </div>
+
+    <div class="crow crow-2">
+      <div class="cc">
+        <div class="cc-hd">
+          <div><div class="cc-title"><span class="dot" style="background:var(--green)"></span>Attrition by Salary Band</div><div class="cc-sub">Headcount &amp; attrition by pay range</div></div>
+          <div class="cc-menu">⋯</div>
+        </div>
+        <div style="height:190px"><canvas id="salaryChart"></canvas></div>
+      </div>
+      <div class="cc">
+        <div class="cc-hd">
+          <div><div class="cc-title"><span class="dot" style="background:var(--blue)"></span>Tenure Analysis</div><div class="cc-sub">Attrition by years at company</div></div>
+          <div class="cc-menu">⋯</div>
+        </div>
+        <div style="height:190px"><canvas id="tenureChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE 2: DEMOGRAPHICS ── -->
+  <div class="page" id="page-demographics">
+    <div class="rh">
+      <div><div class="rh-title">Demographics</div><div class="rh-sub">Gender, marital status &amp; workforce composition</div></div>
+    </div>
+
+    <div class="crow crow-2">
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--blue)"></span>Attrition by Gender</div><div class="cc-sub">Male vs Female comparison</div></div><div class="cc-menu">⋯</div></div>
+        <div style="height:220px"><canvas id="genderChart"></canvas></div>
+      </div>
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--purple)"></span>Attrition by Marital Status</div><div class="cc-sub">Single, Married, Divorced</div></div><div class="cc-menu">⋯</div></div>
+        <div style="height:220px"><canvas id="maritalChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="crow crow-2">
+      <!-- Gender donut -->
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--orange)"></span>Gender Distribution</div><div class="cc-sub">Workforce composition</div></div><div class="cc-menu">⋯</div></div>
+        <div style="height:180px">
+          <div class="donut-row" style="height:100%;align-items:center">
+            <div class="donut-wrap">
+              <canvas id="genderDonut"></canvas>
+              <div class="donut-center"><div class="donut-val" style="font-size:16px;color:var(--blue)" id="gender-donut-val"></div><div class="donut-lbl">Male</div></div>
+            </div>
+            <div class="d-legend" id="gender-legend"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Marital donut -->
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--green)"></span>Marital Status Distribution</div><div class="cc-sub">Workforce breakdown</div></div><div class="cc-menu">⋯</div></div>
+        <div style="height:180px">
+          <div class="donut-row" style="height:100%;align-items:center">
+            <div class="donut-wrap">
+              <canvas id="maritalDonut"></canvas>
+              <div class="donut-center"><div class="donut-val" style="font-size:14px;color:var(--green)">3 Types</div></div>
+            </div>
+            <div class="d-legend" id="marital-legend"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE 3: ATTRITION ANALYSIS ── -->
+  <div class="page" id="page-churn">
+    <div class="rh">
+      <div><div class="rh-title">Attrition Deep Dive</div><div class="rh-sub">Analyze attrition by role, salary, department &amp; overtime factors</div></div>
+    </div>
+
+    <div class="crow crow-2">
+      <!-- Top roles hbar — rendered by JS -->
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--red)"></span>Top Roles by Attrition Count</div><div class="cc-sub">Employees who left per job role</div></div></div>
+        <div id="role-hbars" style="padding-top:4px"></div>
+      </div>
+
+      <!-- Stacked dept chart -->
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--blue)"></span>Active vs Attrited by Department</div><div class="cc-sub">Stacked headcount comparison</div></div></div>
+        <div style="height:220px"><canvas id="stackedDeptChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="crow crow-3">
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--orange)"></span>Salary Band Risk</div><div class="cc-sub">Attrition rate by pay range</div></div></div>
+        <div style="height:180px"><canvas id="salaryRiskChart"></canvas></div>
+      </div>
+
+      <!-- Overtime visual -->
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title"><span class="dot" style="background:var(--purple)"></span>Overtime Impact</div><div class="cc-sub">Attrition rate with / without OT</div></div></div>
+        <div id="ot-bars" style="height:180px;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:8px 0"></div>
+      </div>
+
+      <!-- Key Insights -->
+      <div class="cc">
+        <div class="cc-hd"><div><div class="cc-title">⚡ Key Insights</div><div class="cc-sub">Data-driven recommendations</div></div></div>
+        <div id="insights-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE 4: DATA TABLE ── -->
+  <div class="page" id="page-data">
+    <div class="rh">
+      <div><div class="rh-title">Department Summary Table</div><div class="rh-sub">Attrition metrics by department &amp; salary band</div></div>
+    </div>
+    <div class="crow crow-2">
+      <div class="cc">
+        <div class="cc-hd"><div class="cc-title">📁 Department Attrition Summary</div></div>
+        <table class="dt" id="dept-table"></table>
+      </div>
+      <div class="cc">
+        <div class="cc-hd"><div class="cc-title">💵 Salary Band Attrition Summary</div></div>
+        <table class="dt" id="salary-table"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div class="bbar">
+    <div class="pg-ind">
+      <div class="pg-dot active" id="dot-overview"     onclick="switchPage('overview')">1</div>
+      <div class="pg-dot"        id="dot-demographics" onclick="switchPage('demographics')">2</div>
+      <div class="pg-dot"        id="dot-churn"        onclick="switchPage('churn')">3</div>
+      <div class="pg-dot"        id="dot-data"         onclick="switchPage('data')">4</div>
+      <span style="margin-left:8px">HR Attrition Analysis Dashboard</span>
+    </div>
+    <div class="zoom"><span>Fit page</span><span>100%</span><span>⊞</span></div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   DATA BLOCK — ALL XLSX DATA EMBEDDED HERE
+   To update the dashboard, only edit values in this section.
+══════════════════════════════════════════════════════════════ */
+const DATA = {
+
+  /* ── KPI Cards ───────────────────────────────────── */
+  kpis: [
+    { label:'Total Employees',   value:'200',    change:'Across 6 departments',          changeType:'',   color:'blue'   },
+    { label:'Attrition Rate',    value:'37%',    change:'↑ Above industry avg (18%)',    changeType:'up', color:'red'    },
+    { label:'Retention Rate',    value:'63%',    change:'126 active employees',           changeType:'dn', color:'green'  },
+    { label:'Avg Monthly Income',value:'$7,172', change:'Median: $6,090',                changeType:'',   color:'orange' },
+    { label:'Overtime Workers',  value:'48%',    change:'↑ 96 of 200 employees',         changeType:'up', color:'purple' }
+  ],
+
+  /* ── Overview: Attrition Donut ───────────────────── */
+  attrition: { attrited: 74, active: 126 },
+  attritionAvgAge: { attrited: 39.6, active: 40.1 },
+
+  /* ── Overview: Department Attrition Rate (%) ─────── */
+  deptRate: {
+    labels: ['Finance','HR','IT','Operations','R&D','Sales'],
+    values: [38.7, 34.6, 41.7, 44.7, 30.0, 31.0]
+  },
+
+  /* ── Overview: Overtime Breakdown (headcount) ────── */
+  overtime: {
+    labels: ['No OT Active','No OT Left','OT Active','OT Left'],
+    values: [76, 28, 50, 46]
+  },
+
+  /* ── Overview: Salary Band (active vs attrited) ──── */
+  salaryBand: {
+    labels:   ['<$3k','$3k–5k','$5k–8k','$8k–12k','$12k+'],
+    active:   [31, 26, 25, 23, 21],
+    attrited: [15, 19, 14, 10, 16]
+  },
+
+  /* ── Overview: Tenure (active vs attrited) ───────── */
+  tenure: {
+    labels:   ['0–2 yrs','3–5 yrs','6–10 yrs','11–15 yrs','16–20 yrs'],
+    active:   [14, 16, 35, 31, 27],
+    attrited: [4,  10, 14, 23, 18]
+  },
+
+  /* ── Demographics: Gender ───────────────────────── */
+  gender: {
+    labels:   ['Female','Male'],
+    active:   [64, 62],
+    attrited: [36, 38],
+    total:    { male: 100, female: 100 },
+    attritionRate: { male: 38, female: 36 }
+  },
+
+  /* ── Demographics: Marital Status ───────────────── */
+  marital: {
+    labels:   ['Divorced','Married','Single'],
+    active:   [38, 49, 39],
+    attrited: [26, 22, 26],
+    counts:   { married: 71, single: 65, divorced: 64 }
+  },
+
+  /* ── Churn: Top Roles by Attrition ──────────────── */
+  topRoles: [
+    { role:'Data Analyst',       count:8, rate:67, color:'#e83d3d' },
+    { role:'Operations Analyst', count:8, rate:57, color:'#e83d3d' },
+    { role:'Ops Manager',        count:5, rate:36, color:'#f28b00' },
+    { role:'HR Specialist',      count:5, rate:36, color:'#f28b00' },
+    { role:'Finance Manager',    count:5, rate:36, color:'#f28b00' },
+    { role:'Senior Scientist',   count:5, rate:36, color:'#f28b00' },
+    { role:'Accountant',         count:4, rate:44, color:'#4da3ff' },
+    { role:'Lab Technician',     count:4, rate:27, color:'#4da3ff' }
+  ],
+
+  /* ── Churn: Stacked Dept Chart ───────────────────── */
+  deptStacked: {
+    labels:   ['Finance','HR','IT','Operations','R&D','Sales'],
+    active:   [19, 17, 21, 21, 28, 20],
+    attrited: [12,  9, 15, 17, 12,  9]
+  },
+
+  /* ── Churn: Salary Risk Line ─────────────────────── */
+  salaryRisk: {
+    labels: ['<$3k','$3k–5k','$5k–8k','$8k–12k','$12k+'],
+    rates:  [32.6,   42.2,   35.9,    30.3,     43.2]
+  },
+
+  /* ── Churn: Overtime Impact ─────────────────────── */
+  otImpact: [
+    { label:'With Overtime', pct:62, color:'#e83d3d' },
+    { label:'No Overtime',   pct:32, color:'#12b86a' }
+  ],
+  otInsight: 'Overtime employees are <strong style="color:#e83d3d">1.9×</strong> more likely to attrite',
+
+  /* ── Churn: Key Insights ────────────────────────── */
+  insights: [
+    { type:'red',    icon:'🚨', title:'Critical: Operations Dept',  body:'44.7% attrition rate — highest across all departments' },
+    { type:'orange', icon:'⚠️', title:'Mid-Tenure Risk',            body:'Employees 11–15 yrs show highest attrition (23 left)' },
+    { type:'green',  icon:'✅', title:'High Salary Retention',       body:'$8k–12k band has best retention at 69.7%' },
+    { type:'purple', icon:'📌', title:'Overtime Policy',            body:'Reducing OT could cut attrition by up to ~30%' }
+  ],
+
+  /* ── Data Table: Department Summary ─────────────── */
+  deptTable: [
+    { dept:'Operations', total:38, attrited:17, rate:44.7, barW:89,  risk:'red',    riskLabel:'🔴 High'   },
+    { dept:'IT',         total:36, attrited:15, rate:41.7, barW:83,  risk:'red',    riskLabel:'🔴 High'   },
+    { dept:'Finance',    total:31, attrited:12, rate:38.7, barW:77,  risk:'red',    riskLabel:'🔴 High'   },
+    { dept:'HR',         total:26, attrited:9,  rate:34.6, barW:69,  risk:'yellow', riskLabel:'🟡 Medium' },
+    { dept:'Sales',      total:29, attrited:9,  rate:31.0, barW:62,  risk:'yellow', riskLabel:'🟡 Medium' },
+    { dept:'R&D',        total:40, attrited:12, rate:30.0, barW:60,  risk:'yellow', riskLabel:'🟡 Medium' }
+  ],
+
+  /* ── Data Table: Salary Band Summary ─────────────── */
+  salaryTable: [
+    { band:'$12k+',  total:37, attrited:16, rate:43.2, barW:86, risk:'red',    riskLabel:'🔴 High'   },
+    { band:'$3k–5k', total:45, attrited:19, rate:42.2, barW:84, risk:'red',    riskLabel:'🔴 High'   },
+    { band:'$5k–8k', total:39, attrited:14, rate:35.9, barW:72, risk:'yellow', riskLabel:'🟡 Medium' },
+    { band:'<$3k',   total:46, attrited:15, rate:32.6, barW:65, risk:'yellow', riskLabel:'🟡 Medium' },
+    { band:'$8k–12k',total:33, attrited:10, rate:30.3, barW:61, risk:'green',  riskLabel:'🟢 Lower'  }
+  ]
+};
+/* ══════════════════════════════════════════════════════════════
+   END OF DATA BLOCK
+══════════════════════════════════════════════════════════════ */
+
+
+/* ── CHART.JS DEFAULTS ───────────────────────────────────── */
+Chart.defaults.font.family = "'Segoe UI', sans-serif";
+Chart.defaults.font.size   = 11;
+Chart.defaults.color       = '#93b4e8';
+Chart.defaults.plugins.legend.display = false;
+
+const gridColor = 'rgba(30,58,110,0.6)';
+
+/* ── PAGE SWITCHER ───────────────────────────────────────── */
+const PAGES = ['overview','demographics','churn','data'];
+function switchPage(page) {
+  PAGES.forEach(p => {
+    document.getElementById('page-'+p).classList.remove('active');
+    document.getElementById('tab-'+p).classList.remove('active');
+    document.getElementById('dot-'+p).classList.remove('active');
+  });
+  document.getElementById('page-'+page).classList.add('active');
+  document.getElementById('tab-'+page).classList.add('active');
+  document.getElementById('dot-'+page).classList.add('active');
+  document.querySelectorAll('.sidebar-icon').forEach((el,i) =>
+    el.classList.toggle('active', i === PAGES.indexOf(page))
+  );
+}
+
+/* ── HELPERS ─────────────────────────────────────────────── */
+function rateBar(w) {
+  return `<div class="pb-wrap"><div class="pb-track"><div class="pb-fill" style="width:${w}%"></div></div></div>`;
+}
+function badge(risk, label) {
+  return `<span class="badge badge-${risk}">${label}</span>`;
+}
+
+/* ══════════════════════════════════════════════════════════
+   RENDER FUNCTIONS — build HTML from DATA
+══════════════════════════════════════════════════════════ */
+
+/* KPI Row */
+(function renderKPIs() {
+  document.getElementById('kpi-row').innerHTML = DATA.kpis.map(k => `
+    <div class="kpi ${k.color}">
+      <div class="kpi-lbl">${k.label}</div>
+      <div class="kpi-val">${k.value}</div>
+      <div class="kpi-chg ${k.changeType}">${k.change}</div>
+    </div>`).join('');
+})();
+
+/* Attrition Donut Legend */
+(function renderDonutLegend() {
+  const { attrited, active } = DATA.attrition;
+  const total = attrited + active;
+  const pct = Math.round(attrited / total * 100);
+  document.getElementById('donut-pct').textContent = pct + '%';
+  document.getElementById('donut-legend').innerHTML = `
+    <div class="li"><div class="ldot" style="background:#e83d3d"></div><div class="ltxt">Attrited</div><div class="lval">${attrited}</div></div>
+    <div class="li"><div class="ldot" style="background:#4da3ff"></div><div class="ltxt">Active</div><div class="lval">${active}</div></div>
+    <div class="divider"></div>
+    <div class="li"><div class="ltxt" style="font-size:10px">Avg Age (Attrited)</div><div class="lval">${DATA.attritionAvgAge.attrited}</div></div>
+    <div class="li"><div class="ltxt" style="font-size:10px">Avg Age (Active)</div><div class="lval">${DATA.attritionAvgAge.active}</div></div>`;
+})();
+
+/* Gender Donut Legend */
+(function renderGenderLegend() {
+  const g = DATA.gender;
+  const total = g.total.male + g.total.female;
+  document.getElementById('gender-donut-val').textContent = Math.round(g.total.male/total*100) + '%';
+  document.getElementById('gender-legend').innerHTML = `
+    <div class="li"><div class="ldot" style="background:#4da3ff"></div><div class="ltxt">Male</div><div class="lval">${g.total.male}</div></div>
+    <div class="li"><div class="ldot" style="background:#f28b00"></div><div class="ltxt">Female</div><div class="lval">${g.total.female}</div></div>
+    <div class="divider"></div>
+    <div class="li"><div class="ltxt" style="font-size:10px">Male Attrition Rate</div><div class="lval">${g.attritionRate.male}%</div></div>
+    <div class="li"><div class="ltxt" style="font-size:10px">Female Attrition Rate</div><div class="lval">${g.attritionRate.female}%</div></div>`;
+})();
+
+/* Marital Donut Legend */
+(function renderMaritalLegend() {
+  const { married, single, divorced } = DATA.marital.counts;
+  const total = married + single + divorced;
+  document.getElementById('marital-legend').innerHTML = `
+    <div class="li"><div class="ldot" style="background:#12b86a"></div><div class="ltxt">Married</div><div class="lval">${married} (${Math.round(married/total*100)}%)</div></div>
+    <div class="li"><div class="ldot" style="background:#4da3ff"></div><div class="ltxt">Single</div><div class="lval">${single} (${Math.round(single/total*100)}%)</div></div>
+    <div class="li"><div class="ldot" style="background:#7b68ee"></div><div class="ltxt">Divorced</div><div class="lval">${divorced} (${Math.round(divorced/total*100)}%)</div></div>`;
+})();
+
+/* Top Roles Horizontal Bars */
+(function renderRoleHbars() {
+  const maxCount = Math.max(...DATA.topRoles.map(r => r.count));
+  document.getElementById('role-hbars').innerHTML = DATA.topRoles.map(r => `
+    <div class="hbar-row">
+      <div class="hbar-lbl">${r.role}</div>
+      <div class="hbar-track">
+        <div class="hbar-fill" style="width:${r.count/maxCount*100}%;background:${r.color}">
+          <span>${r.count}</span>
+        </div>
+      </div>
+      <div class="hbar-pct">${r.rate}%</div>
+    </div>`).join('');
+})();
+
+/* Overtime Impact Bars */
+(function renderOTBars() {
+  document.getElementById('ot-bars').innerHTML =
+    DATA.otImpact.map(o => `
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:11px;color:var(--mid);width:100px">${o.label}</div>
+        <div style="flex:1;height:22px;background:var(--bg);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${o.pct}%;background:${o.color};border-radius:4px;display:flex;align-items:center;padding-left:8px">
+            <span style="color:#fff;font-size:11px;font-weight:600">${o.pct}%</span>
+          </div>
+        </div>
+      </div>`).join('') +
+    `<div style="margin-top:6px;font-size:10.5px;color:var(--light);text-align:center">🔴 ${DATA.otInsight}</div>`;
+})();
+
+/* Insights */
+(function renderInsights() {
+  document.getElementById('insights-list').innerHTML = DATA.insights.map(i => `
+    <div class="insight ${i.type}">
+      <div class="insight-title" style="color:var(--${i.type==='red'?'red':i.type==='orange'?'orange':i.type==='green'?'green':'purple'})">${i.icon} ${i.title}</div>
+      <div class="insight-body">${i.body}</div>
+    </div>`).join('');
+})();
+
+/* Department Table */
+(function renderDeptTable() {
+  const rows = DATA.deptTable.map(r => `
+    <tr>
+      <td>${r.dept}</td><td>${r.total}</td><td>${r.attrited}</td><td>${r.rate}%</td>
+      <td>${rateBar(r.barW)}</td><td>${badge(r.risk, r.riskLabel)}</td>
+    </tr>`).join('');
+  const total = DATA.deptTable.reduce((a,r)=>({total:a.total+r.total,attrited:a.attrited+r.attrited}),{total:0,attrited:0});
+  document.getElementById('dept-table').innerHTML = `
+    <thead><tr><th>Department</th><th>Total</th><th>Attrited</th><th>Rate</th><th>Visual</th><th>Risk</th></tr></thead>
+    <tbody>${rows}
+    <tr class="total-row"><td>Total</td><td>${total.total}</td><td>${total.attrited}</td><td>${Math.round(total.attrited/total.total*100)}%</td><td></td><td>${badge('red','🔴 High')}</td></tr>
+    </tbody>`;
+})();
+
+/* Salary Table */
+(function renderSalaryTable() {
+  const rows = DATA.salaryTable.map(r => `
+    <tr>
+      <td>${r.band}</td><td>${r.total}</td><td>${r.attrited}</td><td>${r.rate}%</td>
+      <td>${rateBar(r.barW)}</td><td>${badge(r.risk, r.riskLabel)}</td>
+    </tr>`).join('');
+  const total = DATA.salaryTable.reduce((a,r)=>({total:a.total+r.total,attrited:a.attrited+r.attrited}),{total:0,attrited:0});
+  document.getElementById('salary-table').innerHTML = `
+    <thead><tr><th>Salary Band</th><th>Total</th><th>Attrited</th><th>Rate</th><th>Visual</th><th>Risk</th></tr></thead>
+    <tbody>${rows}
+    <tr class="total-row"><td>Total</td><td>${total.total}</td><td>${total.attrited}</td><td>${Math.round(total.attrited/total.total*100)}%</td><td></td><td></td></tr>
+    </tbody>`;
+})();
+
+/* ══════════════════════════════════════════════════════════
+   CHARTS — all read from DATA object
+══════════════════════════════════════════════════════════ */
+
+/* Attrition Donut */
+new Chart('attritionDonut', {
+  type: 'doughnut',
+  data: {
+    labels: ['Attrited','Active'],
+    datasets: [{ data: [DATA.attrition.attrited, DATA.attrition.active], backgroundColor: ['#e83d3d','#4da3ff'], borderWidth: 0 }]
+  },
+  options: { cutout:'72%', animation:{duration:800}, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw}`}} } }
+});
+
+/* Department Bar */
+new Chart('deptBar', {
+  type: 'bar',
+  data: {
+    labels: DATA.deptRate.labels,
+    datasets: [{ data: DATA.deptRate.values, backgroundColor: DATA.deptRate.values.map(v => v>40?'#e83d3d':v>35?'#f28b00':'#4da3ff'), borderRadius:3 }]
+  },
+  options: {
+    indexAxis: 'y',
+    plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.raw}%`}} },
+    scales: {
+      x: { max:60, grid:{color:gridColor}, ticks:{callback:v=>v+'%'} },
+      y: { grid:{display:false} }
+    },
+    animation:{duration:700}
+  }
+});
+
+/* Overtime Bar */
+new Chart('overtimeBar', {
+  type: 'bar',
+  data: {
+    labels: DATA.overtime.labels,
+    datasets: [{ data: DATA.overtime.values, backgroundColor:['#4da3ff','#e83d3d','#4da3ff','#e83d3d'], borderRadius:3 }]
+  },
+  options: {
+    plugins: { legend:{display:false} },
+    scales: { x:{grid:{display:false},ticks:{font:{size:9}}}, y:{grid:{color:gridColor}} },
+    animation:{duration:700}
+  }
+});
+
+/* Salary Band */
+new Chart('salaryChart', {
+  type: 'bar',
+  data: {
+    labels: DATA.salaryBand.labels,
+    datasets: [
+      { label:'Active',   data: DATA.salaryBand.active,   backgroundColor:'#4da3ff', borderRadius:3 },
+      { label:'Attrited', data: DATA.salaryBand.attrited, backgroundColor:'#e83d3d', borderRadius:3 }
+    ]
+  },
+  options: {
+    plugins: { legend:{display:true, position:'top', labels:{boxWidth:10, font:{size:10}, color:'#93b4e8'}} },
+    scales: { x:{grid:{display:false}}, y:{grid:{color:gridColor}} },
+    animation:{duration:700}
+  }
+});
+
+/* Tenure */
+new Chart('tenureChart', {
+  type: 'bar',
+  data: {
+    labels: DATA.tenure.labels,
+    datasets: [
+      { label:'Active',   data: DATA.tenure.active,   backgroundColor:'#12b86a', borderRadius:3 },
+      { label:'Attrited', data: DATA.tenure.attrited, backgroundColor:'#e83d3d', borderRadius:3 }
+    ]
+  },
+  options: {
+    plugins: { legend:{display:true, position:'top', labels:{boxWidth:10, font:{size:10}, color:'#93b4e8'}} },
+    scales: { x:{grid:{display:false}}, y:{grid:{color:gridColor}} },
+    animation:{duration:700}
+  }
+});
+
+/* Gender Bar */
+new Chart('genderChart', {
+  type: 'bar',
+  data: {
+    labels: DATA.gender.labels,
+    datasets: [
+      { label:'Active',   data: DATA.gender.active,   backgroundColor:'#4da3ff', borderRadius:4 },
+      { label:'Attrited', data: DATA.gender.attrited, backgroundColor:'#e83d3d', borderRadius:4 }
+    ]
+  },
+  options: {
+    plugins: { legend:{display:true, position:'top', labels:{boxWidth:10, color:'#93b4e8'}} },
+    scales: { x:{grid:{display:false}}, y:{grid:{color:gridColor}} },
+    animation:{duration:700}
+  }
+});
+
+/* Marital Bar */
+new Chart('maritalChart', {
+  type: 'bar',
+  data: {
+    labels: DATA.marital.labels,
+    datasets: [
+      { label:'Active',   data: DATA.marital.active,   backgroundColor:'#12b86a', borderRadius:4 },
+      { label:'Attrited', data: DATA.marital.attrited, backgroundColor:'#e83d3d', borderRadius:4 }
+    ]
+  },
+  options: {
+    plugins: { legend:{display:true, position:'top', labels:{boxWidth:10, color:'#93b4e8'}} },
+    scales: { x:{grid:{display:false}}, y:{grid:{color:gridColor}} },
+    animation:{duration:700}
+  }
+});
+
+/* Gender Donut */
+new Chart('genderDonut', {
+  type: 'doughnut',
+  data: {
+    labels: ['Male','Female'],
+    datasets: [{ data:[DATA.gender.total.male, DATA.gender.total.female], backgroundColor:['#4da3ff','#f28b00'], borderWidth:0 }]
+  },
+  options: { cutout:'72%', animation:{duration:800}, plugins:{legend:{display:false}} }
+});
+
+/* Marital Donut */
+new Chart('maritalDonut', {
+  type: 'doughnut',
+  data: {
+    labels: ['Married','Single','Divorced'],
+    datasets: [{ data:[DATA.marital.counts.married, DATA.marital.counts.single, DATA.marital.counts.divorced], backgroundColor:['#12b86a','#4da3ff','#7b68ee'], borderWidth:0 }]
+  },
+  options: { cutout:'65%', animation:{duration:800}, plugins:{legend:{display:false}} }
+});
+
+/* Stacked Dept */
+new Chart('stackedDeptChart', {
+  type: 'bar',
+  data: {
+    labels: DATA.deptStacked.labels,
+    datasets: [
+      { label:'Active',   data: DATA.deptStacked.active,   backgroundColor:'#4da3ff', stack:'s1' },
+      { label:'Attrited', data: DATA.deptStacked.attrited, backgroundColor:'#e83d3d', stack:'s1' }
+    ]
+  },
+  options: {
+    plugins: { legend:{display:true, position:'top', labels:{boxWidth:10, color:'#93b4e8'}} },
+    scales: {
+      x: { stacked:true, grid:{display:false} },
+      y: { stacked:true, grid:{color:gridColor} }
+    },
+    animation:{duration:700}
+  }
+});
+
+/* Salary Risk Line */
+new Chart('salaryRiskChart', {
+  type: 'line',
+  data: {
+    labels: DATA.salaryRisk.labels,
+    datasets: [{
+      data: DATA.salaryRisk.rates,
+      borderColor: '#f28b00',
+      backgroundColor: 'rgba(242,139,0,0.12)',
+      fill: true, tension: 0.4,
+      pointBackgroundColor: '#f28b00',
+      pointRadius: 5, borderWidth: 2.5
+    }]
+  },
+  options: {
+    plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.raw}%`}} },
+    scales: {
+      x: { grid:{display:false} },
+      y: { grid:{color:gridColor}, ticks:{callback:v=>v+'%'}, min:20, max:55 }
+    },
+    animation:{duration:700}
+  }
+});
+</script>
+</body>
+</html>
