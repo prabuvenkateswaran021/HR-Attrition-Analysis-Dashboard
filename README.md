@@ -203,3 +203,6 @@ Dashboard replicates Power BI methodology using open web technologies
 ---
 
 > ⭐ If you found this project helpful, please consider giving it a star!
+
+
+https://prabuvenkateswaran021.github.io/HR-Attrition-Analysis-Dashboard/
